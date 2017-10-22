@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html>
+<head>
+
+	<title>Leaflet Flights</title>
+	
+	<!--<link rel="icon" href="favicon.ico" />	-->
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<link rel="stylesheet" href="https://unpkg.com/leaflet@1.1.0/dist/leaflet.css"
+   integrity="sha512-wcw6ts8Anuw10Mzh9Ytw4pylW8+NAD4ch3lqm9lzAsTxg0GFeJgoAtxuCLREZSC5lUXdVyo/7yfsqFjQ4S+aKw=="
+   crossorigin=""/>
+	
+	<style>
+		#mapid {
+		height: 700px;
+		}
+	</style>
+</head>
+<body>
+<div id="mapid"></div> <!-- Must have 'height' in style argument --><button id='replay'>Replay </button>
+
+
+<script src="https://unpkg.com/leaflet@1.1.0/dist/leaflet.js"
+   integrity="sha512-mNqn2Wg7tSToJhvHcqfzLMU6J4mkOImSPTxVZAdo+lcPlk+GhZmYgACEe0x35K7YzW1zJ7XyJV/TT1MrdXvMcA=="
+   crossorigin=""></script>
+<script
+  src="https://code.jquery.com/jquery-3.2.1.js"
+  integrity="sha256-DZAnKJ/6XZ9si04Hgrsxu/8s717jcIzLy3oi35EouyE="
+  crossorigin="anonymous"></script>
+
+<script src='https://npmcdn.com/@turf/turf@4.6.1/turf.min.js' charset='utf-8'></script>
+
+  
+<script>
+	var mbAttr = 'Map data &copy; <a href="http://openstreetmap.org">OpenStreetMap</a> contributors, ' +
+			'<a href="http://creativecommons.org/licenses/by-sa/2.0/">CC-BY-SA</a>, ' +
+			'Imagery © <a href="http://mapbox.com">Mapbox</a>',
+	mbUrl = 'https://api.tiles.mapbox.com/v4/{id}/{z}/{x}/{y}.png?access_token=pk.eyJ1IjoibmdhdmlzaCIsImEiOiJjaXFheHJmc2YwMDdoaHNrcWM4Yjhsa2twIn0.8i1Xxwd1XifUU98dGE9nsQ';
+
+	var grayscale   = L.tileLayer(mbUrl, {id: 'mapbox.light', attribution: mbAttr}),
+		streets  = L.tileLayer(mbUrl, {id: 'mapbox.streets',   attribution: mbAttr}),
+		outdoors = L.tileLayer(mbUrl, {id: 'mapbox.outdoors', attribution: mbAttr}),
+		satellite = L.tileLayer(mbUrl, {id: 'mapbox.satellite', attribution: mbAttr}),
+		dark = L.tileLayer(mbUrl, {id: 'mapbox.dark', attribution: mbAttr}),
+		light = L.tileLayer(mbUrl, {id: 'mapbox.light', attribution: mbAttr}),
+		satellitestreets = L.tileLayer(mbUrl, {id: 'mapbox.streets-satellite', attribution: mbAttr});
+
+	var map = L.map('mapid', {
+		center: [37.776, -122.414], /*Default location */
+		zoom: 5, /*Default Zoom */
+		layers: [light] // Default basemaplayer on startrup, can also give another layer here to show by default)
+	});
+
+	var baseLayers = {
+		"Grayscale": grayscale,
+		"Streets": streets,
+		"Outdoors": outdoors,
+		"Satellite": satellite,
+		"Satellite Streets": satellitestreets,
+		"Dark Map": dark,
+		"Light Map": light
+	};
+
+	/*
+	var overlays = {
+		"Density": density
+	};*/
+
+	L.control.layers(baseLayers).addTo(map);
+	
+	var airportdata;
+	//Load JSON Airport File
+	$.getJSON("airports.json", function(json) {
+    airportdata = json; 
+	});
+	
+	//Lookup function within Airport JSON 
+	function getAirportByCode(iata) {
+	  return airportdata.filter(
+		  function(data){ return data.iata == iata }
+	  );
+	}
+	
+	
+	
+	
+	
+	//Get Schiphol Flight Data (Last 20 flights):
+	var flightResults;
+	
+	$.ajax({
+        url: 'https://api.schiphol.nl/public-flights/flights?app_id=32a5384b&app_key=9cdbe1ed97059c5d8a2532e2d0ac2017&includedelays=false&page=0&sort=%2Bscheduletime',
+        beforeSend: function(xhr) {
+             xhr.setRequestHeader("ResourceVersion", "v3")
+        }, success: function(data){
+            flightResults = data.flights; // do something with the data 
+			//createRoute(flightResults);
+            
+        }
+	});
+	
+	//Iterate over each entry and create origin, destination, and route
+	var amsterdamAirport = [4.754673, 52.306212];
+	
+	function createRoute(flightResults) {
+	for (i = 0; i< flightResults.length; i++) {
+		//console.log(flightResults[i]);
+		if (flightResults[i].flightDirection== "D") {
+			destination = getAirportByCode(flightResults[i].route.destinations.toLocaleString())
+			destinationAirport = [parseFloat(destination[0].lon),parseFloat(destination[0].lat)];
+			createFlight(amsterdamAirport, destinationAirport);
+		}
+	};
+	}
+	
+	//TBD//TESTING
+	createFlight([-122.414, 37.776],[-99.1332, 19.4326]);
+	createFlight([6.788532, 51.195115],[35.232330, 31.361178]);
+	
+	
+	//Create flight based on input of origin and destination coordinates
+	function createFlight(origin, destination){
+	
+		// A simple line from origin to destination.
+		var route = {
+			"type": "FeatureCollection",
+			"features": [{
+				"type": "Feature",
+				"geometry": {
+					"type": "LineString",
+					"coordinates": [
+						origin,
+						destination
+					]
+				}
+			}]
+		};
+		
+		// A single point that animates along the route.
+		// Coordinates are initially set to origin.
+		var point = {
+			"type": "FeatureCollection",
+			"features": [{
+				"type": "Feature",
+				"geometry": {
+					"type": "Point",
+					"coordinates": origin
+				}
+			}]
+		};
+
+		// Calculate the distance in kilometers between route start/end point.
+		var lineDistance = turf.lineDistance(route.features[0], 'kilometers');
+
+		var arc = [];
+
+		// Draw an arc between the `origin` & `destination` of the two points
+		for (var i = 0; i < lineDistance; i++) {
+			var segment = turf.along(route.features[0], i / 1000 * lineDistance, 'kilometers');
+			arc.push(segment.geometry.coordinates);
+		}
+
+		// Update the route with calculated arc coordinates
+		route.features[0].geometry.coordinates = arc;
+
+		// Used to increment the value of the point measurement against the route.
+		var counter = 0;
+		
+		routeLayer = L.geoJSON(route).addTo(map);
+		pointLayer = L.geoJSON(point).addTo(map);
+		
+		function animate() {
+		// Update point geometry to a new position based on counter denoting
+		// the index to access the arc.
+		point.features[0].geometry.coordinates = route.features[0].geometry.coordinates[counter];
+		
+		console.log(point.features[0].geometry.coordinates)
+		
+		// Update the source with this new data.
+		pointLayer.clearLayers()
+		pointLayer.addData(point).addTo(map);
+
+		// Request the next frame of animation so long as destination has not
+		// been reached.
+		if (point.features[0].geometry.coordinates[0] !== destination[0]) {
+			requestAnimationFrame(animate);
+		}
+
+		counter = counter + 10; //Indirectly control animation speed (higher ==faster)
+		}
+		
+		
+		document.getElementById('replay').addEventListener('click', function() {
+			// Set the coordinates of the original point back to origin
+			routeLayer = L.geoJSON(route).addTo(map);
+			point.features[0].geometry.coordinates = origin;
+
+			// Update the source layer
+			pointLayer.addData(point).addTo(map);
+			//map.getSource('point').setData(point);
+
+			// Reset the counter
+			counter = 0;
+
+			// Restart the animation.
+			animate(counter);
+		});
+		
+		animate(counter);
+
+	}
+	
+	
+
+	
+</script>
+
+</body>
+</html>
